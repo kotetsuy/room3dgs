@@ -54,7 +54,8 @@ room3dgs/
 ├── SPEC.md               # specification (primary source)
 ├── PHASE0_RESULT.md      # Phase 0 proof-of-concept results
 ├── .gitignore            # ignores data/ (requirement 6)
-├── requirements.txt      # fastapi, uvicorn, python-multipart, pillow, pillow-heif
+├── requirements.txt      # app layer: fastapi, uvicorn, python-multipart, pillow, pillow-heif
+├── requirements_patched.txt  # for WorldMirror (copy to the separate env; fixed upstream requirements)
 ├── server.py             # FastAPI: static serving + API
 ├── recon.py              # photo set → scene.ply (WorldMirror wrapper)
 ├── config.py             # paths, MAX_SETS, venv/infer.py locations
@@ -89,6 +90,68 @@ prepared per Phase 0.
 venv Python, and copies the resulting `gaussians.ply` to `set_dir/scene.ply`. It is deliberately
 confined to a single "input dir → scene.ply" function to make swapping the model easy (SPEC §8).
 The run log is written to `set_dir/recon.log`.
+
+### Building the `~/room3dgs-work` environment
+
+The reconstruction environment lives in a work tree `~/room3dgs-work/` outside this repository (to
+keep the 5GB weights and large outputs out of git). The primary source is `PHASE0_RESULT.md`;
+downstream integration is `HANDOFF_room3dgs_genesis.md`.
+
+```
+~/room3dgs-work/
+├── HunyuanWorld-Mirror/   # git clone (infer.py, ckpts/model.safetensors 5GB)
+│   └── requirements_patched.txt   # copy of the repo's fixed requirements
+├── gsplat/                # ROCm/gsplat fork (unused on gfx1151, kept for reference)
+└── out/                   # inference output used for the smoke test
+~/venvs/worldmirror/        # inference venv (reuses ~/.local ROCm torch via a .pth)
+```
+
+Key points (full commands in [README.md](README.md), "3. Set up the reconstruction backend"):
+
+1. **Do not reinstall torch.** The ROCm 7.2.1 build of torch 2.9.1 is already installed natively in
+   `~/.local` (user-site). Place a `userlocal.pth` in the venv (a single line pointing at
+   `~/.local/lib/python3.12/site-packages`) to reuse it. Deleting the venv restores the original
+   state — a non-destructive setup.
+2. **Use WorldMirror v1.1.** v2.0 requires flash-attn, whose CK FMHA compile takes 2+ hours; v1.1
+   avoids it and is non-gated (`tencent/HunyuanWorld-Mirror`, `model.safetensors` 5.05GB).
+3. **Apply two requirements fixes** (below). The fixed list is bundled in this repo as
+   `requirements_patched.txt`; copy it into `~/room3dgs-work/HunyuanWorld-Mirror/` and `pip install
+   -r` it (distinct from the app-layer `requirements.txt`).
+
+   | Upstream | Fixed | Reason |
+   |---|---|---|
+   | `open3d==0.18.0` | `open3d==0.19.0` | 0.18.0 has no Python 3.12 wheel |
+   | (missing) | add `onnxruntime` | required by sky segmentation but omitted upstream |
+
+4. **Download weights**: `snapshot_download('tencent/HunyuanWorld-Mirror', local_dir='ckpts')`.
+5. **Drop the gsplat stub into the venv** (next section).
+
+#### gsplat stub contents
+
+`ROCm/gsplat` (amd_gsplat) **hardcodes wave64 (AMD Instinct / gfx942)** (e.g.
+`rocprim::warp_reduce<float, 64>` in `gsplat/hip/include/Utils.cuh`), so on gfx1151 (RDNA3.5,
+**wave32**) rocprim's `check_virtual_wave_size<64, 32>` fails a **static_assert** ("64 > 32") →
+the native build does not succeed.
+
+But WorldMirror's **feed-forward inference + `.ply` export never call the gsplat rasterizer**:
+`GaussianSplatRenderer.render()` returns **early** right after building `predictions["splats"]` when
+`is_inference=True` (the inference default) — `rasterize_batches` runs only during train/eval. So
+gsplat is needed only as importable symbols, satisfied by a **lightweight stub** of three files.
+
+`src/models/models/rasterization.py` needs exactly two imports:
+`from gsplat.rendering import rasterization` and `from gsplat.strategy import DefaultStrategy`.
+
+```
+~/venvs/worldmirror/lib/python3.12/site-packages/gsplat/
+├── __init__.py     # __version__ = "0.0.0-stub-gfx1151"
+├── rendering.py    # def rasterization(...): raise NotImplementedError(...)
+└── strategy.py     # class DefaultStrategy: pass   ← marker used in isinstance checks
+```
+
+**Impact & future work**: the app renders browser-side (`static/splat-viewer.js`), so the stub is
+harmless. Only if server-side rendering (`infer.py --save_rendered`) or additional 3DGS training is
+needed does a **wave32 port** of gsplat (`64` → `32`, or driving it off
+`__AMDGCN_WAVEFRONT_SIZE__`) plus numerical validation become a separate task.
 
 ### Environment variables
 

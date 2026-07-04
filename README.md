@@ -41,13 +41,66 @@ python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-### 3. Set up the reconstruction backend (WorldMirror)
+### 3. Set up the reconstruction backend (build `~/room3dgs-work`)
 
-The core of `.ply` generation, **WorldMirror (feed-forward 3DGS)**, runs in a separate environment
-**outside this repository**. Follow the Phase 0 procedure (`PHASE0_RESULT.md`) to prepare:
+The core of `.ply` generation, **WorldMirror (feed-forward 3DGS)**, runs in a work tree
+`~/room3dgs-work/` **outside this repository** — this keeps the 5GB weights and large outputs out of
+git. The steps below follow `PHASE0_RESULT.md` / `HANDOFF_room3dgs_genesis.md`.
 
-- **WorldMirror tree**: `~/room3dgs-work/HunyuanWorld-Mirror` (`infer.py`, `ckpts/model.safetensors`, 5GB)
-- **Inference venv**: `~/venvs/worldmirror` (torch 2.9.1+rocm7.2.1)
+> **Prerequisite**: a ROCm 7.2.1 build of PyTorch is already installed **natively in the user-site**
+> (`~/.local`, torch 2.9.1+rocm7.2.1, `python -c "import torch; print(torch.cuda.is_available())"`
+> prints `True`). The dedicated venv only reuses this torch via a `.pth`; it never reinstalls torch.
+
+```bash
+mkdir -p ~/room3dgs-work && cd ~/room3dgs-work
+
+# 3-1. Get the WorldMirror v1.1 tree (v1.1 needs no flash-attn)
+git clone https://github.com/Tencent-Hunyuan/HunyuanWorld-Mirror
+
+# 3-2. Create the inference venv and reuse the existing ROCm torch via a .pth (no torch reinstall)
+python3.12 -m venv ~/venvs/worldmirror
+echo "$HOME/.local/lib/python3.12/site-packages" \
+  > ~/venvs/worldmirror/lib/python3.12/site-packages/userlocal.pth
+
+# 3-3. Install deps using the fixed requirements bundled in this repo
+#      Changes vs. upstream: open3d 0.18.0→0.19.0 (py3.12) + onnxruntime added. See TECHNICAL.md.
+cp ~/room3dgs/requirements_patched.txt ~/room3dgs-work/HunyuanWorld-Mirror/
+cd HunyuanWorld-Mirror
+~/venvs/worldmirror/bin/pip install -r requirements_patched.txt
+
+# 3-4. Download the weights (model.safetensors 5.05GB, non-gated) into ckpts/
+~/venvs/worldmirror/bin/python -c "from huggingface_hub import snapshot_download; \
+  snapshot_download('tencent/HunyuanWorld-Mirror', local_dir='ckpts')"
+```
+
+**gsplat stub (required on gfx1151)**: WorldMirror imports `gsplat`, but the AMD gsplat fork
+hardcodes wave64 and won't compile on gfx1151 (wave32). However, **feed-forward inference and `.ply`
+export never call the gsplat rasterizer** (`render()` returns early during inference). So we drop in
+a lightweight stub that only satisfies the imports (rationale in
+[TECHNICAL.md](TECHNICAL.md#gsplat-stub-contents)):
+
+```bash
+GS=~/venvs/worldmirror/lib/python3.12/site-packages/gsplat
+mkdir -p "$GS"
+printf '__version__ = "0.0.0-stub-gfx1151"\n' > "$GS/__init__.py"
+printf 'def rasterization(*a, **k):\n    raise NotImplementedError("gsplat stub on gfx1151")\n' > "$GS/rendering.py"
+printf 'class DefaultStrategy:\n    pass\n' > "$GS/strategy.py"
+```
+
+**Smoke test (optional)**: the bundled 8 indoor photos exercise the full path to `.ply`.
+
+```bash
+cd ~/room3dgs-work/HunyuanWorld-Mirror
+export HSA_OVERRIDE_GFX_VERSION=11.5.1 HSA_USE_SVM=0 HSA_ENABLE_SDMA=0 PYTORCH_ROCM_ARCH=gfx1151
+~/venvs/worldmirror/bin/python infer.py \
+  --input_path examples/realistic/Room_Cat --output_path out --save_gs
+# → success if out/.../gaussians.ply (~1.3M gaussians) appears
+```
+
+This gives you the two things the app (`server.py`/`recon.py`) points at:
+
+- **WorldMirror tree**: `~/room3dgs-work/HunyuanWorld-Mirror` (`infer.py`, `ckpts/model.safetensors`)
+- **Inference venv**: `~/venvs/worldmirror`
 
 If you keep them elsewhere, override via environment variables (see [TECHNICAL.md](TECHNICAL.md#environment-variables)).
 

@@ -1,0 +1,7 @@
+# room3dgs アプリ（Web層）の依存。
+# 3DGS 再構成本体（WorldMirror / torch-rocm）は別 venv(~/venvs/worldmirror)。
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pillow>=10.0
+pillow-heif>=0.16

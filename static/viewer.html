@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>room3dgs — 3D表示</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; background: #000; }
+    #canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+    .overlay { position: fixed; z-index: 10; color: #e6ebf5; font-family: system-ui, "Noto Sans JP", sans-serif; }
+    .topleft { top: 12px; left: 12px; display: flex; gap: 10px; align-items: center; }
+    .topleft a.back { text-decoration: none; background: #171e2ecc; border: 1px solid #2a3350;
+      color: #e6ebf5; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; }
+    .topleft .title { background: #171e2ecc; padding: 8px 12px; border-radius: 10px; font-size: 14px; }
+    .topright { top: 12px; right: 12px; }
+    .topright a.dl { text-decoration: none; background: #3fd4a3; color: #06251b; padding: 8px 12px;
+      border-radius: 10px; font-size: 14px; font-weight: 700; }
+    .help { bottom: 12px; left: 12px; background: #0c1018cc; border: 1px solid #2a3350;
+      padding: 8px 12px; border-radius: 10px; font-size: 12px; color: #93a0bd; max-width: 90vw; }
+    .stats { bottom: 12px; right: 12px; font-size: 11px; color: #6b7793; text-align: right; }
+    #spinner { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      z-index: 20; background: #000; color: #93a0bd; flex-direction: column; gap: 12px; }
+    #progressWrap { width: 220px; height: 6px; background: #1e2740; border-radius: 4px; overflow: hidden; }
+    #progress { height: 100%; width: 0; background: #5b8cff; }
+    #message { color: #ff6b6b; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="spinner" class="overlay">
+    <div>3DGS を読み込み中…</div>
+    <div id="progressWrap"><div id="progress"></div></div>
+    <div id="message"></div>
+  </div>
+
+  <div class="overlay topleft">
+    <a class="back" href="/">← 戻る</a>
+    <span class="title" id="title">3D表示</span>
+  </div>
+  <div class="overlay topright">
+    <a class="dl" id="download" href="#" download>.ply をダウンロード</a>
+  </div>
+  <div class="overlay help">
+    ドラッグ: 視点回転 ／ ホイール: 前後 ／ WASD・矢印: 移動 ／ Space/Shift: 上下
+  </div>
+  <div class="overlay stats"><span id="fps"></span> <span id="camid"></span></div>
+
+  <!-- 3DGS レンダラ（antimatter15/splat をローカル同梱, CDN非依存）。main() が自動起動 -->
+  <script src="/static/viewer.js"></script>
+  <script src="/static/splat-viewer.js"></script>
+</body>
+</html>

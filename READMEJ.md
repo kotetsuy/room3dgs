@@ -41,13 +41,65 @@ python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-### 3. 再構成本体（WorldMirror）を用意
+### 3. 再構成本体（WorldMirror）を用意（`~/room3dgs-work` の構築）
 
-`.ply` 生成の中核 **WorldMirror（フィードフォワード3DGS）** は、このリポジトリの外にある別環境で動く。
-Phase 0（`PHASE0_RESULT.md`）の手順で以下を用意しておくこと:
+`.ply` 生成の中核 **WorldMirror（フィードフォワード3DGS）** は、このリポジトリの外の作業ツリー
+`~/room3dgs-work/` で動く。重み（5GB）や大容量の生成物を git 管理外に置くための分離。
+以下は `PHASE0_RESULT.md` / `HANDOFF_room3dgs_genesis.md` に沿った実際の構築手順。
 
-- **WorldMirror 実体**: `~/room3dgs-work/HunyuanWorld-Mirror`（`infer.py`, `ckpts/model.safetensors` 5GB）
-- **推論 venv**: `~/venvs/worldmirror`（torch 2.9.1+rocm7.2.1）
+> **前提**: ROCm 7.2.1 対応の PyTorch が **user-site にネイティブ導入済み**であること
+> （`~/.local`, torch 2.9.1+rocm7.2.1, `python -c "import torch; print(torch.cuda.is_available())"` が `True`）。
+> 専用 venv はこの torch を `.pth` で再利用するだけで、torch 自体は入れ直さない。
+
+```bash
+mkdir -p ~/room3dgs-work && cd ~/room3dgs-work
+
+# 3-1. WorldMirror v1.1 本体を取得（flash-attn 不要の v1.1 を使う）
+git clone https://github.com/Tencent-Hunyuan/HunyuanWorld-Mirror
+
+# 3-2. 推論用 venv を作り、既存の ROCm torch を .pth で再利用（torch は入れ直さない）
+python3.12 -m venv ~/venvs/worldmirror
+echo "$HOME/.local/lib/python3.12/site-packages" \
+  > ~/venvs/worldmirror/lib/python3.12/site-packages/userlocal.pth
+
+# 3-3. 依存をインストール（本リポジトリ同梱の修正版 requirements を使う）
+#      上流からの変更: open3d 0.18.0→0.19.0（py3.12 対応）+ onnxruntime 追加。詳細は TECHNICALJ。
+cp ~/room3dgs/requirements_patched.txt ~/room3dgs-work/HunyuanWorld-Mirror/
+cd HunyuanWorld-Mirror
+~/venvs/worldmirror/bin/pip install -r requirements_patched.txt
+
+# 3-4. 重み（model.safetensors 5.05GB, 非gated）を ckpts/ に取得
+~/venvs/worldmirror/bin/python -c "from huggingface_hub import snapshot_download; \
+  snapshot_download('tencent/HunyuanWorld-Mirror', local_dir='ckpts')"
+```
+
+**gsplat スタブ（gfx1151 では必須）**: WorldMirror は `gsplat` を import するが、AMD の gsplat fork は
+wave64 ハードコードのため gfx1151（wave32）でビルドできない。ただし**フィードフォワード推論と `.ply`
+エクスポートは gsplat のラスタライズを一切呼ばない**（`render()` が推論時に早期 return）。そこで import
+だけ満たす軽量スタブを venv に置く（詳細と根拠は [TECHNICALJ.md](TECHNICALJ.md#gsplat-スタブの中身)）:
+
+```bash
+GS=~/venvs/worldmirror/lib/python3.12/site-packages/gsplat
+mkdir -p "$GS"
+printf '__version__ = "0.0.0-stub-gfx1151"\n' > "$GS/__init__.py"
+printf 'def rasterization(*a, **k):\n    raise NotImplementedError("gsplat stub on gfx1151")\n' > "$GS/rendering.py"
+printf 'class DefaultStrategy:\n    pass\n' > "$GS/strategy.py"
+```
+
+**動作確認（任意）**: 付属の室内 8 枚で `.ply` 生成まで通ることを確認できる。
+
+```bash
+cd ~/room3dgs-work/HunyuanWorld-Mirror
+export HSA_OVERRIDE_GFX_VERSION=11.5.1 HSA_USE_SVM=0 HSA_ENABLE_SDMA=0 PYTORCH_ROCM_ARCH=gfx1151
+~/venvs/worldmirror/bin/python infer.py \
+  --input_path examples/realistic/Room_Cat --output_path out --save_gs
+# → out/.../gaussians.ply（約130万ガウシアン）が出れば成功
+```
+
+これで本アプリ（`server.py`/`recon.py`）が参照する 2 つが揃う:
+
+- **WorldMirror 実体**: `~/room3dgs-work/HunyuanWorld-Mirror`（`infer.py`, `ckpts/model.safetensors`）
+- **推論 venv**: `~/venvs/worldmirror`
 
 場所を変えている場合は環境変数で上書きできる（詳細は [TECHNICALJ.md](TECHNICALJ.md#環境変数)）。
 

@@ -48,7 +48,8 @@ room3dgs/
 ├── SPEC.md               # 仕様書（一次資料）
 ├── PHASE0_RESULT.md      # Phase 0 実証結果
 ├── .gitignore            # data/ を無視（要件6）
-├── requirements.txt      # fastapi, uvicorn, python-multipart, pillow, pillow-heif
+├── requirements.txt      # アプリ層: fastapi, uvicorn, python-multipart, pillow, pillow-heif
+├── requirements_patched.txt  # WorldMirror 用（別環境へコピーして使う。上流 requirements の修正版）
 ├── server.py             # FastAPI: 静的配信 + API
 ├── recon.py              # 写真セット → scene.ply（WorldMirror ラッパ）
 ├── config.py             # パス・MAX_SETS・venv/infer.py の場所
@@ -82,6 +83,64 @@ room3dgs/
 生成された `gaussians.ply` を `set_dir/scene.ply` にコピーするだけの薄いラッパ。
 モデル差し替えを容易にするため「入力ディレクトリ → scene.ply」の1関数に閉じてある（SPEC §8）。
 実行ログは `set_dir/recon.log`。
+
+### `~/room3dgs-work` 環境の構築手順
+
+再構成環境はこのリポジトリ外の作業ツリー `~/room3dgs-work/` に置く（重み 5GB と大容量生成物を
+git 管理外にするため）。手順の一次資料は `PHASE0_RESULT.md`、下流連携は `HANDOFF_room3dgs_genesis.md`。
+
+```
+~/room3dgs-work/
+├── HunyuanWorld-Mirror/   # git clone（infer.py, ckpts/model.safetensors 5GB）
+│   └── requirements_patched.txt   # open3d を 0.19.0 に緩めた版
+├── gsplat/                # ROCm/gsplat fork（gfx1151 では未使用・参照のみ）
+└── out/                   # 動作確認用の推論出力
+~/venvs/worldmirror/        # 推論 venv（~/.local の ROCm torch を .pth 再利用）
+```
+
+構築の要点（コマンド全文は [READMEJ.md](READMEJ.md) の「3. 再構成本体を用意」）:
+
+1. **torch は入れ直さない**。ROCm 7.2.1 対応の torch 2.9.1 は `~/.local`（user-site）にネイティブ導入済み。
+   venv に `userlocal.pth`（中身は `~/.local/lib/python3.12/site-packages` の1行）を置いて再利用する。
+   venv を消せば元の状態に戻る非破壊的な構成。
+2. **WorldMirror は v1.1 を使う**。v2.0 は flash-attn 必須で、CK FMHA のコンパイルが 2 時間超になるため回避。
+   v1.1 は flash-attn 不要・非 gated（`tencent/HunyuanWorld-Mirror`, `model.safetensors` 5.05GB）。
+3. **requirements の 2 点を修正**（下表）。修正版は本リポジトリに `requirements_patched.txt` として同梱してあり、
+   これを `~/room3dgs-work/HunyuanWorld-Mirror/` へコピーして `pip install -r` する（アプリ層の `requirements.txt`
+   とは別物）。
+
+   | 元 | 修正 | 理由 |
+   |---|---|---|
+   | `open3d==0.18.0` | `open3d==0.19.0` | 0.18.0 は Python 3.12 用ホイールが無い |
+   | （記載なし） | `onnxruntime` を追加 | sky segmentation が要求するが上流 requirements 記載漏れ |
+
+4. **重み取得**: `snapshot_download('tencent/HunyuanWorld-Mirror', local_dir='ckpts')`。
+5. **gsplat スタブを venv に配置**（次項）。
+
+#### gsplat スタブの中身
+
+`ROCm/gsplat`（amd_gsplat）は **wave64（AMD Instinct / gfx942）をハードコード**しており
+（`gsplat/hip/include/Utils.cuh` の `rocprim::warp_reduce<float, 64>` ほか）、gfx1151（RDNA3.5, **wave32**）では
+rocprim の `check_virtual_wave_size<64, 32>` が「64 > 32」で **static_assert 失敗** → ネイティブビルド不成立。
+
+だが WorldMirror の **フィードフォワード推論 + `.ply` エクスポートは gsplat のラスタライズを呼ばない**:
+`GaussianSplatRenderer.render()` は `is_inference=True`（推論の既定）のとき `predictions["splats"]` 生成直後に
+**早期 return**（`rasterization.py`）し、`rasterize_batches` は学習/評価時のみ走る。よって gsplat は
+「import 可能なシンボル」としてのみ必要で、以下の 3 ファイルの**軽量スタブ**で代替できる。
+
+`src/models/models/rasterization.py` が要求する import は 2 つだけ:
+`from gsplat.rendering import rasterization` と `from gsplat.strategy import DefaultStrategy`。
+
+```
+~/venvs/worldmirror/lib/python3.12/site-packages/gsplat/
+├── __init__.py     # __version__ = "0.0.0-stub-gfx1151"
+├── rendering.py    # def rasterization(...): raise NotImplementedError(...)
+└── strategy.py     # class DefaultStrategy: pass  ← isinstance 判定用のマーカ
+```
+
+**影響と将来課題**: 本アプリの描画はブラウザ（`static/splat-viewer.js`）が行うためスタブで支障なし。
+サーバ側レンダリング（`infer.py --save_rendered`）や 3DGS の追加学習が必要になった場合のみ、gsplat の
+**wave32 移植**（`64` → `32`、または `__AMDGCN_WAVEFRONT_SIZE__` 駆動化）と数値検証が別タスクとして要る。
 
 ### 環境変数
 

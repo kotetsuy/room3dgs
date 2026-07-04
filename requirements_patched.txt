@@ -1,0 +1,47 @@
+# WorldMirror (HunyuanWorld-Mirror v1.1) の依存リスト — gfx1151 / Python 3.12 向け修正版
+#
+# これは *本アプリ* の依存ではない（アプリ層は requirements.txt）。
+# ~/room3dgs-work/HunyuanWorld-Mirror/ に置いて推論 venv へインストールするためのもの。
+#   ~/venvs/worldmirror/bin/pip install -r requirements_patched.txt
+#
+# 上流 HunyuanWorld-Mirror/requirements.txt からの変更点:
+#   - open3d==0.18.0 → 0.19.0  … 0.18.0 は Python 3.12 用ホイールが無い
+#   - onnxruntime を追加        … sky segmentation が要求するが上流は記載漏れ
+# 詳細は TECHNICALJ.md「~/room3dgs-work 環境の構築手順」を参照。
+
+# training dependencies
+lightning>=2.5.0
+hydra-core
+tensorboardX
+rootutils
+h5py
+
+# inference dependencies
+torchmetrics
+pre-commit
+rich==13.3.5
+pytest
+numpy<2.0.0
+trimesh
+roma
+open3d==0.19.0
+einops
+gradio
+matplotlib
+tqdm
+opencv-python
+viser
+pillow_heif
+scipy
+huggingface-hub[torch]>=0.22
+ninja
+jaxtyping
+lpips
+colorspacious
+moviepy==1.0.3
+plyfile
+pycolmap==3.10.0
+tyro
+
+# added (上流 requirements 記載漏れ / sky segmentation 用)
+onnxruntime

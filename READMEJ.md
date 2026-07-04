@@ -1,5 +1,7 @@
 # room3dgs — インストール & 使い方
 
+*English: [README.md](README.md)*
+
 複数枚の室内写真から **3D Gaussian Splatting（`.ply`）** を生成し、Google Chrome 上で表示する
 ローカル完結・オフラインの PoC デモアプリ。
 

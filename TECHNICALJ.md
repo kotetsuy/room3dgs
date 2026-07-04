@@ -1,5 +1,7 @@
 # room3dgs — 技術ドキュメント
 
+*English: [TECHNICAL.md](TECHNICAL.md)*
+
 インストール・使い方は **[READMEJ.md](READMEJ.md)** を参照。本書はアーキテクチャ・外部依存・API・
 検証結果・技術メモを扱う。仕様の一次資料は `SPEC.md`、再構成基盤の実証は `PHASE0_RESULT.md`。
 

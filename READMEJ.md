@@ -71,6 +71,11 @@ cd HunyuanWorld-Mirror
 # 3-4. 重み（model.safetensors 5.05GB, 非gated）を ckpts/ に取得
 ~/venvs/worldmirror/bin/python -c "from huggingface_hub import snapshot_download; \
   snapshot_download('tencent/HunyuanWorld-Mirror', local_dir='ckpts')"
+
+# 3-5. infer.py の一点修正: --save_rendered を既定 False に（gfx1151 では必須）
+#      既定 True のままだと毎回レンダリング動画生成で gsplat ラスタライザ（下記スタブ）を
+#      呼び、NotImplementedError で落ちる。recon.py も明示指定せず既定に依存するため必須。
+sed -i 's/"--save_rendered", action="store_true", default=True/"--save_rendered", action="store_true", default=False/' infer.py
 ```
 
 **gsplat スタブ（gfx1151 では必須）**: WorldMirror は `gsplat` を import するが、AMD の gsplat fork は

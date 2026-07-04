@@ -115,7 +115,11 @@ git 管理外にするため）。手順の一次資料は `PHASE0_RESULT.md`、
    | （記載なし） | `onnxruntime` を追加 | sky segmentation が要求するが上流 requirements 記載漏れ |
 
 4. **重み取得**: `snapshot_download('tencent/HunyuanWorld-Mirror', local_dir='ckpts')`。
-5. **gsplat スタブを venv に配置**（次項）。
+5. **`infer.py` を 1 行修正**: `--save_rendered` の既定を `True` → `False` にする。上流は
+   `action="store_true", default=True`（＝**常に True**）のため毎回レンダリング動画生成に入り、
+   gsplat ラスタライザ（＝次項のスタブ）を呼んで `NotImplementedError` で落ちる。`recon.py` は
+   `--save_rendered` を明示せず既定に依存する（`recon.py:52-58`）ので、この修正は**アプリ動作にも必須**。
+6. **gsplat スタブを venv に配置**（次項）。
 
 #### gsplat スタブの中身
 

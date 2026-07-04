@@ -71,6 +71,12 @@ cd HunyuanWorld-Mirror
 # 3-4. Download the weights (model.safetensors 5.05GB, non-gated) into ckpts/
 ~/venvs/worldmirror/bin/python -c "from huggingface_hub import snapshot_download; \
   snapshot_download('tencent/HunyuanWorld-Mirror', local_dir='ckpts')"
+
+# 3-5. One-line infer.py fix: default --save_rendered to False (required on gfx1151)
+#      Left at the upstream default (True) every run tries to render a video, which calls the
+#      gsplat rasterizer (the stub below) and dies with NotImplementedError. recon.py relies on
+#      this default too (it doesn't pass the flag), so the fix is mandatory.
+sed -i 's/"--save_rendered", action="store_true", default=True/"--save_rendered", action="store_true", default=False/' infer.py
 ```
 
 **gsplat stub (required on gfx1151)**: WorldMirror imports `gsplat`, but the AMD gsplat fork

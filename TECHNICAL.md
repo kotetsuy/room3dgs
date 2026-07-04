@@ -124,7 +124,12 @@ Key points (full commands in [README.md](README.md), "3. Set up the reconstructi
    | (missing) | add `onnxruntime` | required by sky segmentation but omitted upstream |
 
 4. **Download weights**: `snapshot_download('tencent/HunyuanWorld-Mirror', local_dir='ckpts')`.
-5. **Drop the gsplat stub into the venv** (next section).
+5. **Patch one line in `infer.py`**: change the `--save_rendered` default from `True` to `False`.
+   Upstream declares it `action="store_true", default=True` (i.e. **always True**), so every run
+   enters video rendering and calls the gsplat rasterizer (the stub in the next section), dying with
+   `NotImplementedError`. `recon.py` relies on this default too (it does not pass the flag,
+   `recon.py:52-58`), so the fix is **mandatory for the app to work**, not just the smoke test.
+6. **Drop the gsplat stub into the venv** (next section).
 
 #### gsplat stub contents
 

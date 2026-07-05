@@ -127,6 +127,29 @@ HOST=0.0.0.0 PORT=9000 ./start_all.sh
 
 起動したら Chrome で **http://localhost:8000/** を開く。
 
+### GUI隔離起動（GPUハングでログアウトしないための STOP_GDM・任意）
+
+gfx1151 は表示と計算が同じ iGPU のため、推論(`infer.py`)のGPUキューがハングして
+GPUリセットが走ると、デスクトップ(gnome-shell)まで道連れで落ちて **ログアウト**する。
+これを避けたい場合は、GUI のターミナルから gdm を止めて隔離実行できる:
+
+```bash
+STOP_GDM=1 ./start_all.sh
+```
+
+サーバを systemd 一時ユニット `room3dgs-headless` としてセッション外へ切り離してから
+gdm を停止する（ログは同じ `run/server.log`）。
+`HOST` 未指定なら自動で `0.0.0.0` になる。gdm 停止前に 5 秒のカウントダウンがあり、
+**Ctrl+C で中断できる（中断してもサーバは動き続ける）**。デスクトップが閉じたら
+別PCのブラウザで `http://<このマシンのIP>:8000/` を開く。
+GUI 復帰は `Ctrl+Alt+F3` → ログイン → `sudo systemctl start gdm`（サーバは動き続ける）。
+停止は `./stop_all.sh`（systemd ユニットも片付け、gdm が止まっていれば復帰コマンドを案内）。
+
+> GPUリセット自体は起きるので実行中の推論ジョブは落ちる。防げるのは「デスクトップの
+> 巻き添えログアウト」まで。GPUハングの詳細は [`TECHNICALJ.md`](TECHNICALJ.md) 参照。
+> なおテキストコンソール(TTY)からの HEADLESS/tmux 起動は一旦省略中
+> （まずは GUI 上で GPU エラーを観測する方針のため）。
+
 <details>
 <summary>スクリプトを使わず直接起動する場合</summary>
 

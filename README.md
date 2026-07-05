@@ -130,6 +130,33 @@ HOST=0.0.0.0 PORT=9000 ./start_all.sh
 
 Once started, open **http://localhost:8000/** in Chrome.
 
+### Isolated launch from the GUI (optional STOP_GDM, avoids GPU-hang logouts)
+
+On gfx1151 the display and compute share one iGPU, so if the inference
+(`infer.py`) GPU queue hangs and a GPU reset fires, the desktop
+(gnome-shell) is dragged down with it and you get **logged out**. To avoid
+this, you can launch from a GUI terminal with gdm stopped:
+
+```bash
+STOP_GDM=1 ./start_all.sh
+```
+
+The server is detached out of the session as a transient systemd unit
+`room3dgs-headless` before gdm is stopped (logs still go to
+`run/server.log`). If `HOST` is not set it defaults to `0.0.0.0`. A 5-second
+countdown runs before gdm stops — **Ctrl+C aborts it (the server keeps
+running)**. Once the desktop closes, open `http://<this-machine's-IP>:8000/`
+from another PC. Restore the GUI with `Ctrl+Alt+F3` → log in →
+`sudo systemctl start gdm` (the server keeps running). Stop with
+`./stop_all.sh` (also stops the systemd unit and, if gdm is down, points you
+to the restore command).
+
+> The GPU reset itself still happens, so an in-flight inference job dies. What
+> this prevents is the desktop being taken down with it. See
+> [`TECHNICAL.md`](TECHNICAL.md) for the GPU-hang details. Launching from a
+> text console (TTY) via HEADLESS/tmux is omitted for now — the current plan
+> is to first observe the GPU errors with the GUI running.
+
 <details>
 <summary>Starting directly without the scripts</summary>
 

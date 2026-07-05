@@ -235,6 +235,38 @@ The full path was verified with 8 indoor photos from `~/room3dgs-work/out/Room_C
 
 ---
 
+## Known issue: GPU-hang logout (gfx1151)
+
+The desktop can suddenly log out (back to the login screen) during inference. The cause is a
+**GPU reset dragging down the shared iGPU**:
+
+1. The inference (`infer.py`) ROCm/KFD compute queue **hangs** (`ring comp_* timeout`; no
+   `page not present`, i.e. a timeout, not a page fault).
+2. KFD cannot reclaim the queue (`Pasid ... destroy queue failed, ret -110`,
+   `MES might be in unrecoverable state`), so the kernel does a **MODE2 full GPU reset** →
+   `VRAM is lost`.
+3. Because display and compute share one iGPU on gfx1151, `gnome-shell` loses its GL context —
+   `GNOME Shell crashed with signal 6` → GDM restarts the session = **logout**. (Not a reboot,
+   not OOM.)
+
+**Triage**: check `journalctl -k` for `ring comp_* timeout` / `GPU reset` / `VRAM is lost`. If
+there is no `VM_L2_PROTECTION_FAULT` / `page not present`, it is a hang. The chrome/gnome-shell
+names in the log are collateral; the real culprit is the KFD-queue process that could not be
+reclaimed.
+
+**Mitigation (optional)**: run `STOP_GDM=1 ./start_all.sh` from a GUI terminal — the server is
+detached into a transient systemd unit before gdm is stopped, preventing the collateral logout
+(see the isolated-launch section in [`README.md`](README.md)); the in-flight job still dies with
+the GPU reset. The current plan is to first observe the errors with the GUI running, so the
+plain `./start_all.sh` is the normal path (TTY HEADLESS/tmux launch is omitted for now).
+
+**Deeper analysis**: the GPU crash dump (devcoredump) is auto-freed by the kernel after
+`DEVCD_TIMEOUT` (default 300s). A udev rule
+(`/etc/udev/rules.d/99-devcoredump-capture.rules` + `/usr/local/sbin/save-devcoredump.sh`) is
+installed to auto-save the dump and dmesg to `/var/log/devcoredump/` on the next hang.
+
+---
+
 ## References
 
 - WorldMirror: <https://github.com/Tencent-Hunyuan/HunyuanWorld-Mirror> (`tencent/HunyuanWorld-Mirror`)

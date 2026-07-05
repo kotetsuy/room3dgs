@@ -216,6 +216,37 @@ rocprim の `check_virtual_wave_size<64, 32>` が「64 > 32」で **static_asser
 
 ---
 
+## 既知の問題: GPUハングによるログアウト（gfx1151）
+
+推論中に突然デスクトップからログアウトする（ログイン画面に戻る）ことがある。原因は
+**iGPU 共有によるGPUリセットの巻き添え**:
+
+1. 推論(`infer.py`)の ROCm/KFD コンピュートキューが**ハング**する（`ring comp_* timeout`。
+   ページフォールト `page not present` は伴わない＝タイムアウト系）。
+2. KFD がキューを回収できず（`Pasid ... destroy queue failed, ret -110`,
+   `MES might be in unrecoverable state`）、カーネルが **MODE2 フルGPUリセット** →
+   `VRAM is lost`。
+3. gfx1151 は表示と計算が同一 iGPU のため、`gnome-shell` の GLコンテキストが失われ
+   `GNOME Shell crashed with signal 6` → GDM がセッション再起動 = **ログアウト**。
+   （再起動でも OOM でもない。）
+
+**切り分け**: `journalctl -k` で `ring comp_* timeout` / `GPU reset` / `VRAM is lost` を確認。
+`VM_L2_PROTECTION_FAULT` / `page not present` が無ければハング系。表に出る chrome や
+gnome-shell は巻き添えで、真犯人は回収できなかった KFD キューのプロセス。
+
+**回避（任意）**: GUI のターミナルから `STOP_GDM=1 ./start_all.sh` を実行すると、サーバを
+systemd 一時ユニットへ切り離してから gdm を停止し、巻き添えログアウトを防げる
+（[`READMEJ.md`](READMEJ.md) の GUI隔離起動参照）。GPUリセットで実行中ジョブ自体は落ちる。
+現在はまず GUI 上でエラーを観測する方針のため、通常は `./start_all.sh` のまま起動する
+（TTY からの HEADLESS/tmux 起動は一旦省略中）。
+
+**深掘り**: GPUクラッシュダンプ(devcoredump)はカーネルの `DEVCD_TIMEOUT`（既定300秒）で
+自動破棄される。`/etc/udev/rules.d/99-devcoredump-capture.rules` +
+`/usr/local/sbin/save-devcoredump.sh` を導入済みで、次回ハング時は
+`/var/log/devcoredump/` にダンプ・dmesg が自動退避される。
+
+---
+
 ## 参考
 
 - WorldMirror: <https://github.com/Tencent-Hunyuan/HunyuanWorld-Mirror>（`tencent/HunyuanWorld-Mirror`）

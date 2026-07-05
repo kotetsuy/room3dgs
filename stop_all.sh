@@ -10,6 +10,21 @@ set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"
 
 PID_FILE="run/server.pid"
+UNIT="room3dgs-headless"   # GUI隔離起動(start_all.sh STOP_GDM=1)時の systemd ユニット名
+
+# 停止後、gdm が止まっていれば復帰方法を案内する。
+hint_desktop() {
+    if command -v systemctl >/dev/null 2>&1 && ! systemctl is-active --quiet gdm 2>/dev/null; then
+        echo "デスクトップ(gdm)は停止中です。戻すには: sudo systemctl start gdm"
+    fi
+}
+
+# GUI 隔離起動の systemd 一時ユニットが稼働中なら先に停止する。
+# （ユニット停止で uvicorn 本体も終了するため、以降の PID 処理は後始末になる）
+if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$UNIT" 2>/dev/null; then
+    echo "systemd ユニット '$UNIT' を停止します（sudo が必要）…"
+    sudo systemctl stop "$UNIT" || true
+fi
 
 if [[ ! -f "$PID_FILE" ]]; then
     echo "PID ファイルがありません。起動していないようです。"
@@ -18,6 +33,7 @@ if [[ ! -f "$PID_FILE" ]]; then
         echo "uvicorn server:app プロセスを検出。停止します。"
         pkill -f "uvicorn server:app" || true
     fi
+    hint_desktop
     exit 0
 fi
 
@@ -26,6 +42,7 @@ PID="$(cat "$PID_FILE")"
 if ! kill -0 "$PID" 2>/dev/null; then
     echo "PID $PID は既に終了しています。"
     rm -f "$PID_FILE"
+    hint_desktop
     exit 0
 fi
 
@@ -46,3 +63,4 @@ fi
 
 rm -f "$PID_FILE"
 echo "停止しました。"
+hint_desktop

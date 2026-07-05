@@ -112,14 +112,31 @@ If you keep them elsewhere, override via environment variables (see [TECHNICAL.m
 
 ---
 
-## Running
+## Running / Stopping
 
 ```bash
 cd room3dgs
-.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000
+./start_all.sh   # start the server in the background (127.0.0.1:8000)
+./stop_all.sh    # stop the server
 ```
 
-Open **http://localhost:8000/** in Chrome.
+`start_all.sh` launches `uvicorn`, writing the PID to `run/server.pid` and logs to
+`run/server.log` (double-start is prevented automatically). The host/port can be
+overridden via environment variables:
+
+```bash
+HOST=0.0.0.0 PORT=9000 ./start_all.sh
+```
+
+Once started, open **http://localhost:8000/** in Chrome.
+
+<details>
+<summary>Starting directly without the scripts</summary>
+
+```bash
+.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000
+```
+</details>
 
 ---
 

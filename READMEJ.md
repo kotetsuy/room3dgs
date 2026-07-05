@@ -110,14 +110,30 @@ export HSA_OVERRIDE_GFX_VERSION=11.5.1 HSA_USE_SVM=0 HSA_ENABLE_SDMA=0 PYTORCH_R
 
 ---
 
-## 起動
+## 起動 / 停止
 
 ```bash
 cd room3dgs
-.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000
+./start_all.sh   # サーバをバックグラウンド起動（127.0.0.1:8000）
+./stop_all.sh    # サーバを停止
 ```
 
-Chrome で **http://localhost:8000/** を開く。
+`start_all.sh` は `uvicorn` を起動し、PID を `run/server.pid`、ログを `run/server.log`
+に記録する（二重起動は自動で防止）。ホスト/ポートは環境変数で上書きできる:
+
+```bash
+HOST=0.0.0.0 PORT=9000 ./start_all.sh
+```
+
+起動したら Chrome で **http://localhost:8000/** を開く。
+
+<details>
+<summary>スクリプトを使わず直接起動する場合</summary>
+
+```bash
+.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000
+```
+</details>
 
 ---
 

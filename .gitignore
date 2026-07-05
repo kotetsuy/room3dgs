@@ -224,3 +224,6 @@ CLAUDE.local.md
 
 # room3dgs: 写真・生成plyの保存先（機微データ・大容量）
 data/
+
+# 起動スクリプトの PID/ログ
+run/
